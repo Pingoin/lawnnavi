@@ -1,6 +1,7 @@
 #![warn(rust_2018_idioms)]
 
 use futures::stream::StreamExt;
+use linux_embedded_hal::I2cdev;
 use std::{io, str};
 use tokio_util::codec::Decoder;
 
@@ -9,6 +10,7 @@ use nmea::SentenceType::RMC;
 use serde_json::to_string_pretty;
 use tokio_serial::SerialPortBuilderExt;
 
+mod ins;
 mod gnss;
 mod mutex_box;
 
@@ -36,6 +38,8 @@ impl Decoder for LineCodec {
 #[tokio::main]
 async fn main() -> tokio_serial::Result<()> {
     let tty_path = DEFAULT_TTY;
+    let dev = I2cdev::new("/dev/i2c-3").unwrap();
+    let mut inertial=ins::InertialNavigationSystem::new(dev);
 
     let mut port = tokio_serial::new(tty_path, 9600).open_native_async()?;
 
@@ -46,6 +50,7 @@ async fn main() -> tokio_serial::Result<()> {
     let mut reader = LineCodec.framed(port);
 
     let mut gnss = gnss::Gnss::new();
+
 
     while let Some(line_result) = reader.next().await {
         let mut line = line_result.expect("Failed to read line");
@@ -58,6 +63,7 @@ async fn main() -> tokio_serial::Result<()> {
                 }
             }
         }
+        inertial.update();
     }
     Ok(())
 }
